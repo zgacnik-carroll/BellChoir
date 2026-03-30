@@ -48,9 +48,7 @@ public class Member extends Thread {
         while (pendingNote != null) {
             try {
                 wait();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
+            } catch (InterruptedException ignored) {
             }
         }
     }
@@ -75,9 +73,7 @@ public class Member extends Thread {
                 while (pendingNote == null && running) {
                     try {
                         wait();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        return;
+                    } catch (InterruptedException ignored) {
                     }
                 }
 
