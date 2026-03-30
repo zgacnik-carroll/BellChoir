@@ -1,0 +1,25 @@
+<project name="BellChoir" default="run" basedir=".">
+
+    <property name="src.dir"     value="src"/>
+    <property name="build.dir"   value="build"/>
+    <property name="song"        value="MaryLamb.txt"/>
+
+    <target name="clean" description="Remove build artifacts">
+        <delete dir="${build.dir}"/>
+    </target>
+
+    <target name="compile" description="Compile all Java sources">
+        <mkdir dir="${build.dir}"/>
+        <javac srcdir="${src.dir}" destdir="${build.dir}" includeantruntime="false"
+               debug="true" debuglevel="lines,vars,source">
+            <compilerarg value="-Xlint:all"/>
+        </javac>
+    </target>
+
+    <target name="run" depends="compile" description="Run BellChoir with a song file">
+        <java classname="Tone" classpath="${build.dir}" fork="true" failonerror="true">
+            <arg value="${song}"/>
+        </java>
+    </target>
+
+</project>
