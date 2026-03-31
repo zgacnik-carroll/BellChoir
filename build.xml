@@ -1,13 +1,16 @@
 <project name="BellChoir" default="run" basedir=".">
 
+    <!-- Core project paths and the default song used when Ant runs the program. -->
     <property name="src.dir"     value="src"/>
     <property name="build.dir"   value="build"/>
     <property name="song"        value="MaryLamb.txt"/>
 
+    <!-- Removes compiled class files so the next build starts from a clean state. -->
     <target name="clean" description="Remove build artifacts">
         <delete dir="${build.dir}"/>
     </target>
 
+    <!-- Compiles every Java source file into the build output directory. -->
     <target name="compile" description="Compile all Java sources">
         <mkdir dir="${build.dir}"/>
         <javac srcdir="${src.dir}" destdir="${build.dir}" includeantruntime="false"
@@ -16,6 +19,7 @@
         </javac>
     </target>
 
+    <!-- Runs the Bell Choir program with the configured song file argument. -->
     <target name="run" depends="compile" description="Run BellChoir with a song file">
         <java classname="Tone" classpath="${build.dir}" fork="true" failonerror="true">
             <arg value="${song}"/>

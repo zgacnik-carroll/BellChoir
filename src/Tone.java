@@ -11,8 +11,18 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
 
+/**
+ * Entry point and core orchestration class for the Bell Choir lab.
+ * This class loads song files, validates note definitions, assigns bells to
+ * member threads, and starts playback through the conductor.
+ */
 public class Tone {
 
+    /**
+     * Starts the Bell Choir program using the song file path supplied by Ant.
+     *
+     * @param args command-line arguments, where {@code args[0]} is the song file path
+     */
     public static void main(String[] args) {
         if (args.length < 1) {
             System.err.println("Usage: ant run -Dsong=<song-file.txt>");
@@ -36,8 +46,14 @@ public class Tone {
         }
     }
 
+    /** Audio format used when opening the Java Sound output line. */
     private final AudioFormat af;
 
+    /**
+     * Creates a Bell Choir player for the supplied audio format.
+     *
+     * @param af PCM output format used for note playback
+     */
     Tone(AudioFormat af) {
         this.af = af;
     }
@@ -56,6 +72,9 @@ public class Tone {
      *
      * Returns null if the file cannot be read or contains no valid notes.
      * Invalid lines are skipped with a warning rather than aborting.
+     *
+     * @param filename relative or absolute path to the song file
+     * @return parsed bell notes, or {@code null} if the file cannot produce a playable song
      */
     List<BellNote> loadSong(String filename) {
         List<BellNote> notes = new ArrayList<>();
@@ -72,6 +91,7 @@ public class Tone {
                     continue;
                 }
 
+                // Every non-comment line must contain exactly a note token and a duration token.
                 String[] parts = line.split("\\s+");
                 if (parts.length != 2) {
                     System.err.println("Skipping line " + lineNumber + ": invalid format \"" + line +
@@ -136,14 +156,16 @@ public class Tone {
      *   G4B   -> F4S
      *   G4SB  -> G4
      *   A5B   -> G4S  (A5 flat = G#4 = G4S)
+     *
+     * @param noteStr note token as read from the song file
+     * @return equivalent supported note token, or the original token if no mapping applies
      */
     private String resolveFlatNotation(String noteStr) {
         if (!noteStr.endsWith("B") || noteStr.equals("REST")) {
             return noteStr;
         }
 
-        // Flat notation is any valid note token with an extra trailing B, e.g. A4B or A4SB.
-        // Strip the trailing B
+        // Flat notation is represented by appending B to the note token.
         String base = noteStr.substring(0, noteStr.length() - 1);
 
         Map<String, String> flatToSharp = new HashMap<>();
@@ -163,7 +185,7 @@ public class Tone {
 
         String resolved = flatToSharp.get(base);
         if (resolved == null) {
-            // Not a known flat mapping — return as-is and let Note.valueOf handle the error
+            // Unknown flats fall through to the normal enum validation path.
             return noteStr;
         }
         return resolved;
@@ -173,9 +195,12 @@ public class Tone {
      * Assigns notes to Members (threads), then uses a Conductor to play the song.
      * Each Member gets at most 2 unique notes (one per hand).
      * Notes are played one at a time, in order, with correct timing.
+     *
+     * @param song validated sequence of bell notes to perform
+     * @throws LineUnavailableException if Java Sound cannot open the playback line
      */
     void playSong(List<BellNote> song) throws LineUnavailableException {
-        // Collect unique non-REST notes in order of first appearance
+        // Preserve first-seen order so note ownership is deterministic across runs.
         List<Note> uniqueNotes = new ArrayList<>();
         for (BellNote bn : song) {
             if (bn.note != Note.REST && !uniqueNotes.contains(bn.note)) {
@@ -187,8 +212,7 @@ public class Tone {
             line.open();
             line.start();
 
-            // Assign notes to Members — each Member handles 1 or 2 notes
-            // and all playback goes through the same output line.
+            // Pair adjacent unique notes so each member holds at most two bells.
             Map<Note, Member> noteToMember = new HashMap<>();
             List<Member> members = new ArrayList<>();
 
@@ -206,6 +230,7 @@ public class Tone {
                 i += (second != null) ? 2 : 1;
             }
 
+            // Start all member threads before the conductor begins issuing cues.
             for (Member m : members) {
                 m.start();
             }
@@ -214,6 +239,7 @@ public class Tone {
             conductor.conduct();
 
             line.drain();
+            // Stop workers cleanly once every note in the song has been performed.
             for (Member m : members) {
                 m.stopMember();
             }
@@ -221,37 +247,69 @@ public class Tone {
                 try {
                     m.join();
                 } catch (InterruptedException ignored) {
+                    // Ignore interruption during shutdown to keep teardown straightforward.
                 }
             }
         }
     }
 
+    /**
+     * Immutable pairing of a note and its musical duration.
+     */
     static class BellNote {
+        /** Note or rest to be played. */
         final Note note;
+        /** Rhythmic duration for the note. */
         final NoteLength length;
 
+        /**
+         * Creates a parsed bell note.
+         *
+         * @param note note or rest value
+         * @param length duration value
+         */
         BellNote(Note note, NoteLength length) {
             this.note = note;
             this.length = length;
         }
     }
 
+    /**
+     * Supported note lengths for the song file format.
+     */
     enum NoteLength {
         WHOLE(1.0f),
         HALF(0.5f),
         QUARTER(0.25f),
         EIGHTH(0.125f);
 
+        /** Duration of the note length in milliseconds. */
         private final int timeMs;
 
+        /**
+         * Creates a note length constant from its fractional measure value.
+         *
+         * @param length fraction of a measure occupied by the note
+         */
         NoteLength(float length) {
             timeMs = (int) (length * Note.MEASURE_LENGTH_SEC * 1000);
         }
 
+        /**
+         * Returns the playback duration in milliseconds.
+         *
+         * @return note duration in milliseconds
+         */
         public int timeMs() {
             return timeMs;
         }
 
+        /**
+         * Converts the numeric song-file representation into a note length enum.
+         *
+         * @param n numeric duration token from the song file
+         * @return corresponding note length
+         */
         public static NoteLength fromNumeric(int n) {
             switch (n) {
                 case 1: return WHOLE;
@@ -265,8 +323,11 @@ public class Tone {
         }
     }
 
+    /**
+     * Supported pitch set for the lab's bell choir implementation, including REST.
+     */
     enum Note {
-        // REST must be the first 'Note'
+        // REST must remain first so ordinal-based frequency math skips it cleanly.
         REST,
         A4,
         A4S,
@@ -282,7 +343,9 @@ public class Tone {
         G4S,
         A5;
 
+        /** Output sample rate used to synthesize note waveforms. */
         public static final int SAMPLE_RATE = 48 * 1024; // ~48KHz
+        /** One measure is treated as one second to simplify rhythm timing. */
         public static final int MEASURE_LENGTH_SEC = 1;
 
         private static final double step_alpha = (2.0d * Math.PI) / SAMPLE_RATE;
@@ -290,8 +353,12 @@ public class Tone {
         private final double FREQUENCY_A_HZ = 440.0d;
         private final double MAX_VOLUME = 127.0d;
 
+        /** Cached sine-wave sample for one full measure of this note. */
         private final byte[] sinSample = new byte[MEASURE_LENGTH_SEC * SAMPLE_RATE];
 
+        /**
+         * Precomputes a single-measure waveform for the note.
+         */
         Note() {
             int n = this.ordinal();
             if (n > 0) {
@@ -299,6 +366,7 @@ public class Tone {
                 final double exp = halfStepUpFromA / 12.0d;
                 final double freq = FREQUENCY_A_HZ * Math.pow(2.0d, exp);
 
+                // A cached waveform avoids recomputing sine values during playback.
                 final double sinStep = freq * step_alpha;
                 for (int i = 0; i < sinSample.length; i++) {
                     sinSample[i] = (byte) (Math.sin(i * sinStep) * MAX_VOLUME);
@@ -306,6 +374,11 @@ public class Tone {
             }
         }
 
+        /**
+         * Returns the cached waveform for this note.
+         *
+         * @return PCM sample bytes for one measure of audio
+         */
         public byte[] sample() {
             return sinSample;
         }

@@ -1,22 +1,31 @@
 import javax.sound.sampled.SourceDataLine;
 
 /**
- * A Member of the Bell Choir. Each Member runs in its own thread and
- * is responsible for playing 1 or 2 assigned notes (one per hand).
- *
- * The Conductor signals a Member by calling playNote(), which unblocks
- * the Member's thread to play the note, then waits for it to complete
- * before the Conductor moves on.
+ * Represents one bell choir performer.
+ * Each member owns one or two notes and waits on its thread until the
+ * conductor signals that one of those notes should be played.
  */
 public class Member extends Thread {
 
-    private final Tone.Note noteOne;      // First (always assigned) note
-    private final Tone.Note noteTwo;      // Second (optional) note — null if only one note
+    /** First assigned note, corresponding to one hand. */
+    private final Tone.Note noteOne;
+    /** Optional second assigned note, corresponding to the other hand. */
+    private final Tone.Note noteTwo;
+    /** Shared audio line used to write the generated waveform. */
     private final SourceDataLine line;
 
-    private Tone.BellNote pendingNote;    // The note the Conductor wants played next
-    private boolean running;         // Whether this Member is still active
+    /** Pending note to play; null while the member is idle. */
+    private Tone.BellNote pendingNote;
+    /** Flag that keeps the thread alive until the choir is finished. */
+    private boolean running;
 
+    /**
+     * Creates a member that can play one or two assigned notes.
+     *
+     * @param noteOne first required note assignment
+     * @param noteTwo optional second note assignment; may be {@code null}
+     * @param line shared audio line for playback
+     */
     Member(Tone.Note noteOne, Tone.Note noteTwo, SourceDataLine line) {
         this.noteOne = noteOne;
         this.noteTwo = noteTwo;
@@ -32,7 +41,7 @@ public class Member extends Thread {
      * @param bn the BellNote to play (must be one of this Member's assigned notes)
      */
     synchronized void playNote(Tone.BellNote bn) {
-        // Sanity check — only this Member's notes should ever be passed in
+        // Reject programming errors where a note is routed to the wrong member.
         if (bn.note != noteOne && bn.note != noteTwo) {
             throw new IllegalArgumentException(
                     "Member assigned to [" + noteOne + (noteTwo != null ? ", " + noteTwo : "") +
@@ -40,21 +49,22 @@ public class Member extends Thread {
             );
         }
 
-        // Post the note and wake the Member thread
+        // Publish the requested note and wake the waiting worker thread.
         this.pendingNote = bn;
         notifyAll();
 
-        // Wait until the Member finishes playing
+        // The conductor waits here so notes remain strictly sequential.
         while (pendingNote != null) {
             try {
                 wait();
             } catch (InterruptedException ignored) {
+                // Interruption is ignored so playback semantics stay simple for the lab.
             }
         }
     }
 
     /**
-     * Signals the Member thread to stop after finishing any current note.
+     * Signals the member thread to shut down after any current note completes.
      */
     synchronized void stopMember() {
         running = false;
@@ -69,11 +79,12 @@ public class Member extends Thread {
     public void run() {
         synchronized (this) {
             while (running) {
-                // Wait for the Conductor to assign a note
+                // Sleep until the conductor posts the next note assignment.
                 while (pendingNote == null && running) {
                     try {
                         wait();
                     } catch (InterruptedException ignored) {
+                        // Ignore and keep waiting; the lab does not need interruption handling.
                     }
                 }
 
@@ -81,14 +92,14 @@ public class Member extends Thread {
                     break;
                 }
 
-                // Play the assigned note
+                // Snapshot the work item before playback, then clear it afterward in finally.
                 if (pendingNote != null) {
                     Tone.BellNote toPlay = pendingNote;
 
                     try {
                         writeAudio(toPlay);
                     } finally {
-                        // Signal back to the Conductor that we're done
+                        // Wake the conductor so it can continue with the next bell note.
                         pendingNote = null;
                         notifyAll();
                     }
@@ -100,14 +111,22 @@ public class Member extends Thread {
     /**
      * Writes audio samples for the given note to this Member's audio line.
      * Called while holding the monitor (Conductor is blocked in wait).
+     *
+     * @param bn note and duration pair to render
      */
     private void writeAudio(Tone.BellNote bn) {
         final int ms = Math.min(bn.length.timeMs(), Tone.Note.MEASURE_LENGTH_SEC * 1000);
         final int length = Tone.Note.SAMPLE_RATE * ms / 1000;
         line.write(bn.note.sample(), 0, length);
+        // Add a tiny gap after each note to keep the bell boundaries perceptible.
         line.write(Tone.Note.REST.sample(), 0, 50);
     }
 
+    /**
+     * Returns a readable description of the member's assigned notes.
+     *
+     * @return display string used for debugging
+     */
     @Override
     public String toString() {
         return "Member[" + noteOne + (noteTwo != null ? ", " + noteTwo : "") + "]";
