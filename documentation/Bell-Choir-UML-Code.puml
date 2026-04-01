@@ -1,0 +1,93 @@
+@startuml
+title Bell Choir UML Diagram
+
+class Tone {
+  - AudioFormat af
+  + main(args : String[]) : void
+  + Tone(af : AudioFormat)
+  + loadSong(filename : String) : List<BellNote>
+  + playSong(song : List<BellNote>) : void
+  - resolveFlatNotation(noteStr : String) : String
+}
+
+class Conductor {
+  - SourceDataLine line
+  - List<Tone.BellNote> song
+  - Map<Tone.Note, Member> noteToMember
+  + Conductor(line : SourceDataLine, song : List<Tone.BellNote>, noteToMember : Map<Tone.Note, Member>)
+  + conduct() : void
+  - playRest(length : Tone.NoteLength) : void
+}
+
+class Member {
+  - Tone.Note noteOne
+  - Tone.Note noteTwo
+  - SourceDataLine line
+  - Tone.BellNote pendingNote
+  - boolean running
+  + Member(noteOne : Tone.Note, noteTwo : Tone.Note, line : SourceDataLine)
+  + playNote(bn : Tone.BellNote) : void
+  + stopMember() : void
+  + run() : void
+  - writeAudio(bn : Tone.BellNote) : void
+  + toString() : String
+}
+
+class "Tone.BellNote" as BellNote {
+  + Tone.Note note
+  + Tone.NoteLength length
+  + BellNote(note : Tone.Note, length : Tone.NoteLength)
+}
+
+enum "Tone.NoteLength" as NoteLength {
+  WHOLE
+  HALF
+  QUARTER
+  EIGHTH
+  + timeMs() : int
+  + fromNumeric(n : int) : NoteLength
+}
+
+enum "Tone.Note" as Note {
+  REST
+  A4
+  A4S
+  B4
+  C4
+  C4S
+  D4
+  D4S
+  E4
+  F4
+  F4S
+  G4
+  G4S
+  A5
+  + sample() : byte[]
+}
+
+Tone ..> BellNote : loads / plays
+Tone ..> NoteLength : validates
+Tone ..> Note : validates
+Tone --> Member : creates threads
+Tone --> Conductor : creates
+Conductor --> Member : cues
+Conductor --> BellNote : iterates
+Member --> BellNote : plays
+BellNote --> Note
+BellNote --> NoteLength
+Member --|> Thread
+
+note right of Member
+Each Member owns one or two notes.
+The Conductor blocks until playNote
+finishes, ensuring sequential playback.
+end note
+
+note bottom of Tone
+Tone is the program entry point and
+coordinates parsing, assignment,
+thread startup, and shutdown.
+end note
+
+@enduml
