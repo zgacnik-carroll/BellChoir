@@ -247,7 +247,7 @@ public class Tone {
                 try {
                     m.join();
                 } catch (InterruptedException ignored) {
-                    // Ignore interruption during shutdown to keep teardown straightforward.
+                    // Ignore interruption during shutdown.
                 }
             }
         }

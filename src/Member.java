@@ -58,7 +58,7 @@ public class Member extends Thread {
             try {
                 wait();
             } catch (InterruptedException ignored) {
-                // Interruption is ignored so playback semantics stay simple for the lab.
+                // Interruption is ignored.
             }
         }
     }
@@ -84,7 +84,7 @@ public class Member extends Thread {
                     try {
                         wait();
                     } catch (InterruptedException ignored) {
-                        // Ignore and keep waiting; the lab does not need interruption handling.
+                        // Ignore and keep waiting.
                     }
                 }
 
